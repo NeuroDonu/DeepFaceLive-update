@@ -154,7 +154,8 @@ class FramePlayer(Disposable):
 
         returns FramePlayer.ProcessResult()
         """
-        # Process player logic.
+        # Process player logic
+        result = FramePlayer.ProcessResult()
         new_is_playing = None
         new_frame_idx = None
         new_frame_timestamp = None
@@ -164,7 +165,22 @@ class FramePlayer(Disposable):
         if fps == 0:
             fps = self._default_fps
 
-        result = FramePlayer.ProcessResult()
+        # Обработка состояния воспроизведения
+        if self._req_is_playing is not None:
+            new_is_playing = self._req_is_playing
+        else:
+            new_is_playing = self._is_playing
+
+        if new_is_playing != self._is_playing:
+            if new_is_playing:
+                self._is_playing = True
+                result.new_is_playing = True
+                self._frame_timestamp = datetime.now().timestamp()
+                self._on_play_start()
+            else:
+                self._is_playing = False
+                result.new_is_playing = False
+                self._on_play_stop()
 
         if self._is_playing:
             if self._is_realtime:
@@ -176,15 +192,15 @@ class FramePlayer(Disposable):
                 new_frame_idx = self._frame_idx + 1
                 new_frame_timestamp = datetime.now().timestamp()
 
+        # Обработка перемотки
         if self._req_frame_seek_idx is not None:
-            # User frame seek overrides new frame idx
             seek_idx, seek_mode = self._req_frame_seek_idx
             if seek_mode == 0:
                 new_frame_idx = seek_idx
             elif seek_mode == 1:
                 new_frame_idx = self._frame_idx + seek_idx
             elif seek_mode == 2:
-                new_frame_idx = self._frame_count - seek_idx -1
+                new_frame_idx = self._frame_count - seek_idx - 1
 
             new_frame_timestamp = datetime.now().timestamp()
 

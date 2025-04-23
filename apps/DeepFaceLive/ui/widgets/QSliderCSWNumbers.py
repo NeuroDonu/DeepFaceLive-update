@@ -48,14 +48,28 @@ class QSliderCSWNumbers(QCSWControl):
 
     def _on_csw_idx_count(self, idx_count):
         #print('_on_csw_idx_count', idx_count)
-        if idx_count is not None:
+        if idx_count is not None and idx_count > 0: # Добавим проверку idx_count > 0
             with qtx.BlockSignals([self._slider, self._spinbox_index, self._spinbox_count]):
                 self._slider.setMinimum(1)
-                self._slider.setMaximum(idx_count)
+                # --- ИСПРАВЛЕНИЕ ЗДЕСЬ ---
+                self._slider.setMaximum(int(idx_count))
+                # -------------------------
+                # Старая строка: self._slider.setValue(int(idx_count)) # НЕПРАВИЛЬНО!
+
                 self._spinbox_index.setMinimum(1)
-                self._spinbox_index.setMaximum(idx_count)
-                self._spinbox_count.setMaximum(idx_count)
-                self._spinbox_count.setValue(idx_count)
+                self._spinbox_index.setMaximum(int(idx_count))
+                self._spinbox_count.setMaximum(int(idx_count)) # Можно оставить или убрать
+                self._spinbox_count.setValue(int(idx_count))
+        elif idx_count is not None and idx_count <= 0: # Обработка случая 0 кадров
+             with qtx.BlockSignals([self._slider, self._spinbox_index, self._spinbox_count]):
+                self._slider.setMinimum(0)
+                self._slider.setMaximum(0)
+                self._slider.setValue(0)
+                self._spinbox_index.setMinimum(0)
+                self._spinbox_index.setMaximum(0)
+                self._spinbox_index.setValue(0)
+                self._spinbox_count.setMaximum(0)
+                self._spinbox_count.setValue(0)
 
     def _on_slider_valueChanged(self):
         self._csw_idx.set_number(self._slider.value()-1)

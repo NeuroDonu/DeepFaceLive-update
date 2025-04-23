@@ -15,7 +15,8 @@ class HKernel:
                         np.int64   : 'long',
                         np.uint64  : 'ulong',
                         np.float16 : 'half',
-                        np.float32 : 'float'
+                        np.float32 : 'float',
+                        np.float64 : 'double'
                       }
 
     @staticmethod

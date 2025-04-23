@@ -161,10 +161,16 @@ class FileSourceWorker(BackendWorker):
                     cs.is_autorewind.enable()
                     cs.is_autorewind.set_flag(is_autorewind)
 
+                    frame_count = fp.get_frame_count()
                     cs.frame_count.enable()
-                    cs.frame_count.set_number( fp.get_frame_count() )
+                    cs.frame_count.set_number(frame_count)
 
                     cs.frame_index.enable()
+                    cs.frame_index.set_config(lib_csw.Number.Config(min=0,
+                                                                    max=frame_count - 1 if frame_count > 0 else 0,
+                                                                    step=1,
+                                                                    decimals=0,
+                                                                    allow_instant_update=False))
                     cs.frame_index.set_number( fp.get_frame_idx() )
 
                     cs.play.enable()
@@ -267,13 +273,17 @@ class FileSourceWorker(BackendWorker):
                     cs.error.set_error(pr.new_error)
 
                 if pr.new_frame_idx is not None:
+                    #print(f"Tick Update: Idx={pr.new_frame_idx}, Frame Provided={pr.new_frame is not None}")
                     cs.frame_index.set_number(pr.new_frame_idx, block_event=True)
 
                 p_frame = pr.new_frame
                 if p_frame is not None:
+                    #print(f"  Got NEW frame object for index {p_frame.frame_num}")
                     self.bcd_uid += 1
                 elif reemit_frame and self.last_p_frame is not None:
                     p_frame = self.last_p_frame
+                #else:
+                    #print(f"  No new frame object received this tick.")
 
                 if p_frame is not None:
                     # Frame is changed or reemit, construct new ds
@@ -296,9 +306,20 @@ class FileSourceWorker(BackendWorker):
                     self.pending_bcd = bcd
 
         if self.pending_bcd is not None:
-            if self.bc_out.is_full_read(1):
-                self.bc_out.write(self.pending_bcd)
-                self.pending_bcd = None
+            can_write = self.bc_out.is_full_read(1)
+            #print(f"  Checking send. Pending BCD UID: {self.pending_bcd.get_uid()}. Can write to bc_out: {can_write}")
+            if can_write:
+                #print(f"    Attempting to write BCD UID: {self.pending_bcd.get_uid()}...")
+                try:
+                    self.bc_out.write(self.pending_bcd)
+                    #print(f"    Write successful for UID: {self.pending_bcd.get_uid()}.")
+                    self.pending_bcd = None
+                except Exception as e:
+                    #print(f"    Write failed for UID: {self.pending_bcd.get_uid()}. Exception: {e}")
+                    self.pending_bcd = None
+            else:
+                pass
+                #print("  No pending BCD to send this tick.")
 
         time.sleep(0.001)
 
