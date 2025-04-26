@@ -69,7 +69,7 @@ class FaceDetectorWorker(BackendWorker):
         self.temporal_rects = []
         self.CenterFace = None
         self.S3FD = None
-        self.YoloV8Face = None
+        self.YOLOV8Face = None
 
         lib_os.set_timer_resolution(1)
 
@@ -147,7 +147,7 @@ class FaceDetectorWorker(BackendWorker):
             elif detector_type == DetectorType.S3FD:
                 self.S3FD = onnx_models.S3FD(device)
             elif detector_type == DetectorType.YOLOV8:
-                self.YoloV8Face = onnx_models.YoloV8Face(device)
+                self.YOLOV8Face = onnx_models.YoloV8Face(device)
         else:
             if detector_type == DetectorType.CENTER_FACE:
                 state.center_face_state.device = device
@@ -215,7 +215,7 @@ class FaceDetectorWorker(BackendWorker):
                 detector_type = state.detector_type
                 if (detector_type == DetectorType.CENTER_FACE and self.CenterFace is not None) or \
                     (detector_type == DetectorType.S3FD and self.S3FD is not None) or \
-                    (detector_type == DetectorType.YOLOV8 and self.YoloV8Face is not None):
+                    (detector_type == DetectorType.YOLOV8 and self.YOLOV8Face is not None):
 
                     detector_state = state.get_detector_state()
 
@@ -227,15 +227,11 @@ class FaceDetectorWorker(BackendWorker):
 
                         rects = []
                         if detector_type == DetectorType.CENTER_FACE:
-                            extracted_rects = self.CenterFace.extract (frame_image, threshold=detector_state.threshold, fixed_window=detector_state.fixed_window_size)
-                            if extracted_rects:
-                                rects = extracted_rects[0]
+                            rects = self.CenterFace.extract (frame_image, threshold=detector_state.threshold, fixed_window=detector_state.fixed_window_size)[0]
                         elif detector_type == DetectorType.S3FD:
-                            extracted_rects = self.S3FD.extract (frame_image, threshold=detector_state.threshold, fixed_window=detector_state.fixed_window_size)
-                            if extracted_rects:
-                                rects = extracted_rects[0]
+                            rects = self.S3FD.extract (frame_image, threshold=detector_state.threshold, fixed_window=detector_state.fixed_window_size)[0]
                         elif detector_type == DetectorType.YOLOV8:
-                            rects = self.YoloV8Face.extract (frame_image, threshold=detector_state.threshold, fixed_window=detector_state.fixed_window_size)
+                            rects = self.YOLOV8Face.extract (frame_image, threshold=detector_state.threshold, fixed_window=detector_state.fixed_window_size)[0]
 
                         # to list of FaceURect
                         rects = [ FRect.from_ltrb( (l/W, t/H, r/W, b/H) ) for l,t,r,b in rects ]
@@ -326,7 +322,7 @@ class CenterFaceState(BackendWorkerState):
 class S3FDState(BackendWorkerState):
     device = None
 
-class YoloV8FaceState(BackendWorkerState):
+class YOLOV8FaceState(BackendWorkerState):
     device = None
 
 class WorkerState(BackendWorkerState):
@@ -335,7 +331,7 @@ class WorkerState(BackendWorkerState):
         self.detector_state = {}
         self.center_face_state = CenterFaceState()
         self.S3FD_state = S3FDState()
-        self.YOLOV8_state = YoloV8FaceState()
+        self.YOLOV8_state = YOLOV8FaceState()
 
     def get_detector_state(self) -> DetectorState:
         state = self.detector_state.get(self.detector_type, None)

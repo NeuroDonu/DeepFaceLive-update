@@ -112,7 +112,7 @@ def get_available_devices_info(include_cpu=True, cpu_only=False) -> List[ORTDevi
     detected_devices = []
     if not cpu_only:
         count = int(os.environ.get('ORT_DEVICES_COUNT', 0))
-        print(f"get_available_devices_info: Found {count} devices in environment.") # Отладка
+        #print(f"get_available_devices_info: Found {count} devices in environment.") # Отладка
         for i in range(count):
             try:
                 device_info = ORTDeviceInfo(
@@ -123,7 +123,7 @@ def get_available_devices_info(include_cpu=True, cpu_only=False) -> List[ORTDevi
                     free_memory=int(os.environ[f'ORT_DEVICE_{i}_FREE_MEM']),
                 )
                 detected_devices.append(device_info)
-                print(f"get_available_devices_info: Loaded device {i}: {device_info}") # Отладка
+                #print(f"get_available_devices_info: Loaded device {i}: {device_info}") # Отладка
             except KeyError as e:
                 print(f"Warning: Environment variables for ORT device {i} not fully set (missing {e}). Skipping.")
                 continue
@@ -151,17 +151,17 @@ def _initialize_ort_devices_info():
     """
     if int(os.environ.get('ORT_DEVICES_INITIALIZED', 0)) == 1:
         # Уже инициализировано в этом процессе
-        print("_initialize_ort_devices_info: Already initialized.")
+        #print("_initialize_ort_devices_info: Already initialized.")
         return
 
     os.environ['ORT_DEVICES_INITIALIZED'] = '1'
     os.environ['ORT_DEVICES_COUNT'] = '0'
-    print("_initialize_ort_devices_info: Initializing...")
+    #print("_initialize_ort_devices_info: Initializing...")
 
     devices = [] # Список словарей для найденных устройств
     try:
         prs = rt.get_available_providers()
-        print(f"ONNX Runtime Available Providers: {prs}")
+        #print(f"ONNX Runtime Available Providers: {prs}")
     except Exception as e:
         print(f"Warning: Could not get available ONNX Runtime providers: {e}")
         prs = []
@@ -186,7 +186,7 @@ def _initialize_ort_devices_info():
     should_check_nvidia = (can_use_cuda_ep or can_use_tensorrt_ep) and not no_cuda
 
     if should_check_nvidia:
-        print("Checking for NVIDIA devices...")
+        #print("Checking for NVIDIA devices...")
         os.environ['CUDA_CACHE_MAXSIZE'] = '2147483647'
         try:
             libnames = ('libcuda.so', 'libcuda.dylib', 'nvcuda.dll')
@@ -196,7 +196,7 @@ def _initialize_ort_devices_info():
                     # Добавляем winmode=0 для Windows, чтобы избежать поиска в System32 перед PATH
                     load_kw = {'winmode': 0} if os.name == 'nt' else {}
                     cuda = ctypes.CDLL(libname, **load_kw)
-                    print(f"Loaded CUDA library: {libname}")
+                    #print(f"Loaded CUDA library: {libname}")
                     break
                 except OSError:
                     continue
@@ -341,7 +341,7 @@ def _initialize_ort_devices_info():
                                 'total_mem': desc.DedicatedVideoMemory,
                                 'free_mem': desc.DedicatedVideoMemory, # DXGI не дает свободной памяти
                             })
-                            print(f"  Added device: [{adapter_idx}] {desc.Description} as DmlExecutionProvider")
+                            #print(f"  Added device: [{adapter_idx}] {desc.Description} as DmlExecutionProvider")
                         else:
                              print(f"  Skipped DXGI adapter [{adapter_idx}] {desc.Description} (Software/Remote).")
 
@@ -360,7 +360,8 @@ def _initialize_ort_devices_info():
             print(f'Error during DirectML device detection: {e}')
             print(traceback.format_exc())
     else:
-        print("DirectML device check skipped (DmlExecutionProvider not found in ONNX Runtime).")
+        pass
+        #print("DirectML device check skipped (DmlExecutionProvider not found in ONNX Runtime).")
 
 
     # --- Запись найденных устройств в переменные окружения ---

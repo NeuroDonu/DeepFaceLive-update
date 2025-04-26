@@ -1,7 +1,6 @@
 *
-!*.py
 !*.md
 !*.txt
 !*.jpg
 !*.png
-default_settings/
+!modelhub\onnx\YoloV8Face

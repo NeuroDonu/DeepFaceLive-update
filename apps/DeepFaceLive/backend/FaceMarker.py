@@ -1,3 +1,6 @@
+# C:\Users\neurodonu\Downloads\DeepFaceLive\DeepFaceLive\apps\DeepFaceLive\backend\FaceMarker.py
+# Код без отладочных принтов и сохранения изображений
+
 import time
 from enum import IntEnum
 import numpy as np
@@ -13,6 +16,7 @@ from .BackendBase import (BackendConnection, BackendDB, BackendHost,
                           BackendSignal, BackendWeakHeap, BackendWorker,
                           BackendWorkerState)
 
+
 class MarkerType(IntEnum):
     OPENCV_LBF = 0
     GOOGLE_FACEMESH = 1
@@ -22,7 +26,6 @@ MarkerTypeNames = ['OpenCV LBF','Google FaceMesh','InsightFace_2D106']
 
 class FaceMarker(BackendHost):
     def __init__(self, weak_heap : BackendWeakHeap, reemit_frame_signal : BackendSignal, bc_in : BackendConnection, bc_out : BackendConnection, backend_db : BackendDB = None):
-
         super().__init__(backend_db=backend_db,
                          sheet_cls=Sheet,
                          worker_cls=FaceMarkerWorker,
@@ -92,31 +95,32 @@ class FaceMarkerWorker(BackendWorker):
               (marker_type == MarkerType.INSIGHT_2D106 and state.insightface_2d106_state.device == device) ):
             marker_state = state.get_marker_state()
 
-            if state.marker_type == MarkerType.OPENCV_LBF:
-                self.opencv_lbf = cv_models.FaceMarkerLBF()
-            elif state.marker_type == MarkerType.GOOGLE_FACEMESH:
-                self.google_facemesh = onnx_models.FaceMesh(state.google_facemesh_state.device)
-            elif state.marker_type == MarkerType.INSIGHT_2D106:
-                self.insightface_2d106 = onnx_models.InsightFace2D106(state.insightface_2d106_state.device)
+            # Выносим загрузку моделей сюда, чтобы она происходила только при успешном выборе устройства
+            try:
+                if state.marker_type == MarkerType.OPENCV_LBF:
+                    self.opencv_lbf = cv_models.FaceMarkerLBF()
+                elif state.marker_type == MarkerType.GOOGLE_FACEMESH:
+                    self.google_facemesh = onnx_models.FaceMesh(state.google_facemesh_state.device)
+                elif state.marker_type == MarkerType.INSIGHT_2D106:
+                    self.insightface_2d106 = onnx_models.InsightFace2D106(state.insightface_2d106_state.device)
+            except Exception as e:
+                 print(f"!!! Error loading marker model for {MarkerTypeNames[marker_type]} on device {device}: {e}")
+                 self.opencv_lbf = self.google_facemesh = self.insightface_2d106 = None
+                 return # Прерываем настройку, т.к. модель не загрузилась
 
+            # Настройка UI после успешной загрузки модели
             cs.marker_coverage.enable()
             cs.marker_coverage.set_config(lib_csw.Number.Config(min=0.1, max=3.0, step=0.1, decimals=1, allow_instant_update=True))
 
             marker_coverage = marker_state.marker_coverage
-            if marker_coverage is None:
-                if marker_type == MarkerType.OPENCV_LBF:
-                    marker_coverage = 1.1
-                elif marker_type == MarkerType.GOOGLE_FACEMESH:
-                    marker_coverage = 1.4
-                elif marker_type == MarkerType.INSIGHT_2D106:
-                    marker_coverage = 1.6
-            cs.marker_coverage.set_number(marker_coverage)
+            default_coverage = {MarkerType.OPENCV_LBF: 1.1, MarkerType.GOOGLE_FACEMESH: 1.4, MarkerType.INSIGHT_2D106: 1.6}.get(marker_type, 1.4)
+            cs.marker_coverage.set_number(marker_coverage if marker_coverage is not None else default_coverage)
 
             cs.temporal_smoothing.enable()
             cs.temporal_smoothing.set_config(lib_csw.Number.Config(min=1, max=150, step=1, allow_instant_update=True))
             cs.temporal_smoothing.set_number(marker_state.temporal_smoothing if marker_state.temporal_smoothing is not None else 1)
 
-        else:
+        else: # Если выбрано None или другое устройство
             if marker_type == MarkerType.OPENCV_LBF:
                 state.opencv_lbf_state.device = device
             elif marker_type == MarkerType.GOOGLE_FACEMESH:
@@ -141,7 +145,7 @@ class FaceMarkerWorker(BackendWorker):
         cfg = cs.temporal_smoothing.get_config()
         temporal_smoothing = state.get_marker_state().temporal_smoothing = int(np.clip(temporal_smoothing,  cfg.min, cfg.max))
         if temporal_smoothing == 1:
-            self.temporal_lmrks = []
+            self.temporal_lmrks = [] # Сбрасываем буфер при отключении сглаживания
         cs.temporal_smoothing.set_number(temporal_smoothing)
         self.save_state()
         self.reemit_frame_signal.send()
@@ -159,68 +163,140 @@ class FaceMarkerWorker(BackendWorker):
                 is_frame_reemitted = bcd.get_is_frame_reemitted()
 
                 marker_type = state.marker_type
-                marker_state = state.get_marker_state()
+                marker_state = state.get_marker_state() # Получаем актуальные настройки покрытия и сглаживания
 
+                # Проверяем, загружена ли нужная модель
                 is_opencv_lbf = marker_type == MarkerType.OPENCV_LBF and self.opencv_lbf is not None
                 is_google_facemesh = marker_type == MarkerType.GOOGLE_FACEMESH and self.google_facemesh is not None
                 is_insightface_2d106 = marker_type == MarkerType.INSIGHT_2D106 and self.insightface_2d106 is not None
                 is_marker_loaded = is_opencv_lbf or is_google_facemesh or is_insightface_2d106
 
-                if marker_type is not None:
+                if marker_type is not None and is_marker_loaded:
                     frame_image = bcd.get_image(bcd.get_frame_image_name())
 
-                    if frame_image is not None and is_marker_loaded:
+                    if frame_image is not None:
                         fsi_list = bcd.get_face_swap_info_list()
-                        if marker_state.temporal_smoothing != 1 and \
-                            len(self.temporal_lmrks) != len(fsi_list):
-                            self.temporal_lmrks = [ [] for _ in range(len(fsi_list)) ]
+
+                        # Синхронизируем размер буфера сглаживания с количеством лиц
+                        if marker_state.temporal_smoothing is not None and marker_state.temporal_smoothing != 1 and len(self.temporal_lmrks) != len(fsi_list):
+                           # Аккуратно изменяем размер, сохраняя существующие данные, если возможно
+                           new_temporal_lmrks = [[] for _ in range(len(fsi_list))]
+                           for i in range(min(len(self.temporal_lmrks), len(fsi_list))):
+                               new_temporal_lmrks[i] = self.temporal_lmrks[i]
+                           self.temporal_lmrks = new_temporal_lmrks
+
 
                         for face_id, fsi in enumerate(fsi_list):
                             if fsi.face_urect is not None:
-                                # Cut the face to feed to the face marker
-                                face_image, face_uni_mat = fsi.face_urect.cut(frame_image, marker_state.marker_coverage, 256 if is_opencv_lbf else \
-                                                                                                                         192 if is_google_facemesh else \
-                                                                                                                         192 if is_insightface_2d106 else 0 )
+                                # Определяем целевой размер для маркера
+                                target_size = 0
+                                if is_opencv_lbf: target_size = 256
+                                elif is_google_facemesh: target_size = 192
+                                elif is_insightface_2d106: target_size = 192
+                                else:
+                                    continue # Пропускаем это лицо
+
+                                # Вырезаем лицо
+                                face_image = None
+                                face_uni_mat = None
+                                try:
+                                    # Используем актуальное значение marker_coverage из marker_state
+                                    current_coverage = marker_state.marker_coverage
+                                    if current_coverage is None: # Fallback на дефолтное, если еще не установлено
+                                        current_coverage = {MarkerType.OPENCV_LBF: 1.1, MarkerType.GOOGLE_FACEMESH: 1.4, MarkerType.INSIGHT_2D106: 1.6}.get(marker_type, 1.4)
+
+                                    face_image, face_uni_mat = fsi.face_urect.cut(frame_image, current_coverage, target_size)
+
+                                except Exception as e:
+                                     # В рабочей версии можно логировать ошибку, если нужно
+                                     # print(f"Error during face cut: {e}")
+                                     continue # Пропускаем это лицо, если не удалось вырезать
+
+                                # Получаем размеры вырезанного лица
+                                if face_image is None: continue
                                 _,H,W,_ = ImageProcessor(face_image).get_dims()
-                                if is_opencv_lbf:
-                                    lmrks = self.opencv_lbf.extract(face_image)[0]
-                                elif is_google_facemesh:
-                                    lmrks = self.google_facemesh.extract(face_image)[0]
-                                elif is_insightface_2d106:
-                                    lmrks = self.insightface_2d106.extract(face_image)[0]
+                                lmrks = None # Инициализируем
 
-                                if marker_state.temporal_smoothing != 1:
-                                    if not is_frame_reemitted or len(self.temporal_lmrks[face_id]) == 0:
-                                        self.temporal_lmrks[face_id].append(lmrks)
-                                    self.temporal_lmrks[face_id] = self.temporal_lmrks[face_id][-marker_state.temporal_smoothing:]
-                                    lmrks = np.mean(self.temporal_lmrks[face_id],0 )
+                                # Запускаем маркер
+                                try:
+                                    if is_opencv_lbf: lmrks = self.opencv_lbf.extract(face_image)[0]
+                                    elif is_google_facemesh: lmrks = self.google_facemesh.extract(face_image)[0]
+                                    elif is_insightface_2d106: lmrks = self.insightface_2d106.extract(face_image)[0]
+                                except Exception as e:
+                                     # В рабочей версии можно логировать ошибку
+                                     # print(f"Error during marker extraction: {e}")
+                                     pass # lmrks останется None
 
-                                if is_google_facemesh:
-                                    fsi.face_pose = FPose.from_3D_468_landmarks(lmrks)
+                                # Обработка лендмарков
+                                if lmrks is not None and lmrks.size > 0:
+                                    current_smoothing_len = marker_state.temporal_smoothing
+                                    if current_smoothing_len is None: current_smoothing_len = 1
 
-                                if is_opencv_lbf:
-                                    lmrks /= (W,H)
-                                elif is_google_facemesh:
-                                    lmrks = lmrks[...,0:2] / (W,H)
-                                elif is_insightface_2d106:
-                                    lmrks = lmrks[...,0:2] / (W,H)
+                                    if current_smoothing_len > 1:
+                                        if face_id < len(self.temporal_lmrks):
+                                            if not is_frame_reemitted or len(self.temporal_lmrks[face_id]) == 0:
+                                                self.temporal_lmrks[face_id].append(lmrks)
+                                            self.temporal_lmrks[face_id] = self.temporal_lmrks[face_id][-current_smoothing_len:]
+                                            lmrks_processed = np.mean(self.temporal_lmrks[face_id], 0 )
+                                        else:
+                                            lmrks_processed = lmrks # Используем сырые, если face_id за пределами буфера
+                                    else:
+                                        lmrks_processed = lmrks
 
-                                face_ulmrks = FLandmarks2D.create (ELandmarks2D.L68 if is_opencv_lbf else \
-                                                                   ELandmarks2D.L468 if is_google_facemesh else \
-                                                                   ELandmarks2D.L106 if is_insightface_2d106 else None, lmrks)
-                                face_ulmrks = face_ulmrks.transform(face_uni_mat, invert=True)
-                                fsi.face_ulmrks = face_ulmrks
+                                    # Расчет позы для FaceMesh
+                                    if is_google_facemesh:
+                                        try:
+                                            fsi.face_pose = FPose.from_3D_468_landmarks(lmrks_processed)
+                                        except Exception as e:
+                                            # print(f"Error calculating pose: {e}")
+                                            fsi.face_pose = None
+
+                                    # Нормализация координат
+                                    lmrks_normalized = None
+                                    landmark_type = None
+                                    if is_opencv_lbf:
+                                        lmrks_normalized = lmrks_processed / (W,H); landmark_type = ELandmarks2D.L68
+                                    elif is_google_facemesh:
+                                        if lmrks_processed.shape[-1] >= 2:
+                                            lmrks_normalized = lmrks_processed[...,0:2] / (W,H); landmark_type = ELandmarks2D.L468
+                                    elif is_insightface_2d106:
+                                         if lmrks_processed.shape[-1] >= 2:
+                                            lmrks_normalized = lmrks_processed[...,0:2] / (W,H); landmark_type = ELandmarks2D.L106
+
+                                    # Создание объекта FLandmarks2D и трансформация обратно
+                                    if lmrks_normalized is not None and landmark_type is not None and face_uni_mat is not None:
+                                        try:
+                                            face_ulmrks = FLandmarks2D.create (landmark_type, lmrks_normalized)
+                                            face_ulmrks = face_ulmrks.transform(face_uni_mat, invert=True)
+                                            fsi.face_ulmrks = face_ulmrks
+                                        except Exception as e:
+                                             # print(f"Error creating/transforming landmarks: {e}")
+                                             fsi.face_ulmrks = None
+                                    else:
+                                        fsi.face_ulmrks = None
+
+                                else: # Если маркер не вернул лендмарки
+                                    fsi.face_ulmrks = None
+                                    fsi.face_pose = None
+                            else: # Если fsi.face_urect is None
+                                 pass # Пропускаем лицо без рамки
 
                     self.stop_profile_timing()
-                self.pending_bcd = bcd
+                else:
+                    pass
 
-        if self.pending_bcd is not None:
-            if self.bc_out.is_full_read(1):
-                self.bc_out.write(self.pending_bcd)
-                self.pending_bcd = None
-            else:
-                time.sleep(0.001)
+                if bcd is not None:
+                     self.pending_bcd = bcd
 
+            if self.pending_bcd is not None:
+                if self.bc_out.is_full_read(1):
+                    self.bc_out.write(self.pending_bcd)
+                    self.pending_bcd = None
+                else:
+                    time.sleep(0.001)
+
+
+# --- Остальные классы без изменений ---
 class MarkerState(BackendWorkerState):
     marker_coverage : float = None
     temporal_smoothing : int = None
@@ -243,9 +319,7 @@ class WorkerState(BackendWorkerState):
         self.insightface_2d106_state = Insight2D106State()
 
     def get_marker_state(self) -> MarkerState:
-        state = self.marker_state.get(self.marker_type, None)
-        if state is None:
-            state = self.marker_state[self.marker_type] = MarkerState()
+        state = self.marker_state.setdefault(self.marker_type, MarkerState())
         return state
 
 class Sheet:
@@ -264,61 +338,3 @@ class Sheet:
             self.device = lib_csw.DynamicSingleSwitch.Host()
             self.marker_coverage = lib_csw.Number.Host()
             self.temporal_smoothing = lib_csw.Number.Host()
-
-# lmrks_list = []
-
-# offsets = [ (0,0), (-2,0), (0,-2), (2,0), (0,2) ]
-
-# for x_off, y_off in offsets:
-#     feed_image = face_image.copy()
-
-#     if x_off > 0:
-#         feed_image[:-x_off] = feed_image[x_off:]
-#     elif x_off < 0:
-#         feed_image[x_off:] = feed_image[:-x_off]
-
-#     if y_off > 0:
-#         feed_image[:,:-y_off] = feed_image[:,y_off:]
-#     elif y_off < 0:
-#         feed_image[:,y_off:] = feed_image[:,:-y_off]
-
-#     if marker_type == MarkerType.OPENCV_LBF:
-#         lmrks = self.opencv_lbf.extract(feed_image)
-
-#     lmrks_list.append(lmrks)
-
-# #print(lmrks_list)
-# lmrks = np.mean(lmrks_list, 0)
-# self.temporal_lmrks.append(lmrks)
-# if len(self.temporal_lmrks) >= 5:
-#     self.temporal_lmrks.pop(0)
-# lmrks = np.mean(self.temporal_lmrks,0 )
-
-
-
-# x = 4
-# spatial_offsets = [ (0,0), (-x,0), (0,-x), (x,0), (0,x) ]
-
-# lmrks_list = []
-# for i in range(temporal_smoothing):
-#     if temporal_smoothing == 1:
-#         feed_image = face_image
-#     else:
-#         feed_image = face_image.copy()
-
-#         x_off,y_off = spatial_offsets[i]
-
-#         if x_off > 0:
-#             feed_image[:-x_off] = feed_image[x_off:]
-#         elif x_off < 0:
-#             feed_image[x_off:] = feed_image[:-x_off]
-
-#         if y_off > 0:
-#             feed_image[:,:-y_off] = feed_image[:,y_off:]
-#         elif y_off < 0:
-#             feed_image[:,y_off:] = feed_image[:,:-y_off]
-
-
-#     lmrks_list.append(lmrks)
-
-# lmrks = np.mean(lmrks_list, 0)

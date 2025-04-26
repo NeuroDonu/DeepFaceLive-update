@@ -34,7 +34,7 @@ def InferenceSession_with_device(onnx_model_or_path, device_info : ORTDeviceInfo
     provider_options_list = []
 
     if device_ep == 'TensorrtExecutionProvider':
-        print("Configuring TensorRT Execution Provider...") # Отладочное сообщение
+        #print("Configuring TensorRT Execution Provider...") # Отладочное сообщение
         trt_options = {
             'device_id': device_info.get_index(),
             'trt_engine_cache_enable': False,  # <--- ОТКЛЮЧАЕМ КЭШ ДВИЖКА TRT
@@ -51,7 +51,7 @@ def InferenceSession_with_device(onnx_model_or_path, device_info : ORTDeviceInfo
             provider_options_list.append({}) # Пустые опции для CPU
 
     elif device_ep == 'CUDAExecutionProvider':
-        print("Configuring CUDA Execution Provider...") # Отладочное сообщение
+        #print("Configuring CUDA Execution Provider...") # Отладочное сообщение
         cuda_options = {
             'device_id': device_info.get_index(),
             # 'arena_extend_strategy': 'kSameAsRequested', # Пример других опций CUDA
@@ -63,7 +63,7 @@ def InferenceSession_with_device(onnx_model_or_path, device_info : ORTDeviceInfo
             provider_options_list.append({})
 
     elif device_ep == 'DmlExecutionProvider':
-        print("Configuring DML Execution Provider...") # Отладочное сообщение
+        #print("Configuring DML Execution Provider...") # Отладочное сообщение
         dml_options = {
             'device_id': device_info.get_index(),
         }
@@ -74,13 +74,13 @@ def InferenceSession_with_device(onnx_model_or_path, device_info : ORTDeviceInfo
             provider_options_list.append({})
     else:
         # Для CPU или других провайдеров
-        print(f"Configuring {device_ep}...")
+        #print(f"Configuring {device_ep}...")
         providers_list.append(device_ep)
         provider_options_list.append({}) # Обычно CPU не требует опций
 
 
-    print(f"Creating InferenceSession with providers: {providers_list}")
-    print(f"Provider options: {provider_options_list}")
+    #print(f"Creating InferenceSession with providers: {providers_list}")
+    #print(f"Provider options: {provider_options_list}")
 
     # --- СОЗДАНИЕ СЕССИИ ---
     # Используем новый формат передачи опций
@@ -89,5 +89,5 @@ def InferenceSession_with_device(onnx_model_or_path, device_info : ORTDeviceInfo
                                providers=providers_list,
                                provider_options=provider_options_list)
 
-    print("InferenceSession created successfully.")
+    #print("InferenceSession created successfully.")
     return sess

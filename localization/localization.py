@@ -1078,6 +1078,42 @@ class Localization:
                 'ja-JP' : 'ストリーミング出力',
                 'de-DE' : 'Streamausgabe'},
 
+    'QStreamOutput.rtmp_url':{
+                'en-US' : 'RTMP URL',
+                'ru-RU' : 'URL RTMP',
+                'zh-CN' : 'RTMP URL',
+                'es-ES' : 'URL RTMP',
+                'it-IT' : 'URL RTMP',
+                'ja-JP' : 'RTMP URL',
+                'de-DE' : 'RTMP-URL'},
+
+    'QStreamOutput.help.rtmp_url':{
+                'en-US' : 'RTMP URL for streaming output.',
+                'ru-RU' : 'URL RTMP для выходного потока.',
+                'zh-CN' : 'RTMP URL 用于视频流输出。',
+                'es-ES' : 'URL RTMP para el flujo de salida.',  
+                'it-IT' : 'URL RTMP per l\'output stream.',
+                'ja-JP' : 'ストリーミング出力用のRTMP URL',
+                'de-DE' : 'RTMP-URL für die Streamausgabe'},
+
+    'QStreamOutput.stream_via_rtmp':{
+                'en-US' : 'Stream via RTMP',
+                'ru-RU' : 'Поток через RTMP',
+                'zh-CN' : '通过RTMP流',
+                'es-ES' : 'Transmitir a través de RTMP',
+                'it-IT' : 'Streamare tramite RTMP',
+                'ja-JP' : 'RTMP経由でストリーミング',
+                'de-DE' : 'Über RTMP streamen'},
+    'QStreamOutput.help.stream_via_rtmp':{
+                'en-US' : 'Make Stream via RTMP',
+                'ru-RU' : 'Создает Поток через RTMP',
+                'zh-CN' : '通过RTMP流',
+                'es-ES' : 'Transmitir a través de RTMP',
+                'it-IT' : 'Streamare tramite RTMP', 
+                'ja-JP' : 'RTMP経由でストリーミング',
+                'de-DE' : 'Über RTMP streaming'},
+
+
     'QStreamOutput.avg_fps':{
                 'en-US' : 'Average FPS',
                 'ru-RU' : 'Среднее кадр/сек',
